@@ -249,6 +249,7 @@ export function initProfile(
   if (!existsSync(manifestPath)) {
     const manifest: ProfileManifest & { private: boolean } = {
       name: `dsh-profile-${basename(dir)}`,
+      version: '0.0.0',
       private: true,
       dependencies: {},
       dsh: { profile: { bundles: [...bundles] } },
@@ -572,6 +573,20 @@ function sameBundles(left: readonly string[], right: readonly string[]): boolean
 }
 
 /**
+ * Add `version` to a profile manifest missing it. A profile's manifest names
+ * the profile, and request package inventory resolution walks loose plugin
+ * modules to their nearest manifest, which must declare a non-empty name and
+ * version (`plugin-package-inventory-deepseek`). Profiles scaffolded before
+ * versioning lack the field, so heal them in place once.
+ */
+function healProfileManifestVersion(dir: string, manifest: ProfileManifest): ProfileManifest {
+  if (typeof manifest.version === 'string' && manifest.version.length > 0) return manifest
+  const healed: ProfileManifest = { ...manifest, version: '0.0.0' }
+  writeProfileManifest(dir, healed)
+  return healed
+}
+
+/**
  * Normalize an exact installation-owned bundle tuple to its shipped template,
  * preserving all other manifest fields. Other bundle lists remain untouched.
  */
@@ -657,7 +672,7 @@ export function loadProfileDirectory(
   installAnchor: string,
   options: { userLayer?: boolean } = {},
 ): Profile {
-  const manifest = readProfileManifest(binName, dir)
+  const manifest = healProfileManifestVersion(dir, readProfileManifest(binName, dir))
   const bundles = manifest.dsh?.profile?.bundles ?? []
   const layers: ProfileLayer[] = []
   const skippedBundles: SkippedBundle[] = []

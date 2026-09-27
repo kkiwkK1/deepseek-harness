@@ -214,6 +214,7 @@ describe('initProfile', () => {
     initProfile(dir, ['@deepseek-ai/dsh-base'])
     const manifest = readProfileManifest('t', dir)
     expect(manifest.dsh?.profile?.bundles).toEqual(['@deepseek-ai/dsh-base'])
+    expect(manifest.version).toBe('0.0.0')
     expect(readFileSync(join(dir, PROFILE_PATCH_FILENAME), 'utf8')).toContain('[]')
     expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toContain('nodeLinker: hoisted')
     // Re-init keeps user edits.
@@ -232,6 +233,27 @@ describe('manifest round-trip', () => {
     writeFileSync(join(dir, 'package.json'), '[]')
     expect(() => readProfileManifest('t', dir)).toThrow('must hold a JSON object')
     expect(() => readProfileManifest('t', join(dir, 'nope'))).toThrow('failed to read profile manifest')
+  })
+})
+
+describe('profile manifest version', () => {
+  it('heals a versionless manifest in place during load and preserves an existing version', () => {
+    const anchor = stageInstallation({ 'bundle-a': { patch: '[]\n' } })
+    const dir = tmp()
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({
+      name: 'dsh-profile-demo', private: true, dsh: { profile: { bundles: ['bundle-a'] } },
+    }))
+    const profile = loadProfileDirectory('t', dir, anchor)
+    expect(profile.layers.map(layer => layer.packageName)).toEqual(['bundle-a'])
+    const healed = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    expect(healed.version).toBe('0.0.0')
+    expect(healed.name).toBe('dsh-profile-demo')
+
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({
+      name: 'dsh-profile-demo', version: '2.5.1', dsh: { profile: { bundles: ['bundle-a'] } },
+    }))
+    loadProfileDirectory('t', dir, anchor)
+    expect(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version).toBe('2.5.1')
   })
 })
 
