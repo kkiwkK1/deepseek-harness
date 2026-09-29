@@ -258,8 +258,10 @@ describe('imageCardModel', () => {
     expect(withMeta?.label).toBe('shots/persisted.png')
   })
 
-  it('declines a call head that is not read_image', () => {
+  it('declines a call head outside the requested tool, and accepts an integrated read head', () => {
     expect(imageCardModel(settled({ call: { name: 'read', argsRaw: ARGS } }))).toBeNull()
+    expect(imageCardModel(settled({ call: { name: 'read', argsRaw: ARGS } }), undefined, undefined, 'read'))
+      .toMatchObject({ label: 'shots/card.png' })
     expect(imageCardModel(settled({ call: { name: 'read_image', argsRaw: '{"file_path":"  "}' } }))).toBeNull()
   })
 })
@@ -279,7 +281,8 @@ describe('ReadImageRow keyed toolview', () => {
     renderSlot?: PropsRenderSlots<'tool.call.images'>['renderSlot'],
     loader: MessageImageLoader = loadImage,
   ): Parameters<typeof ReadImageRow>[0] => ({
-    useDisclosure, callId: 'c1', toolName: 'read_image', ...('kind' in block ? { phase: 'result' as const, block: block } : { phase: block.phase, block: block }), openFile: vi.fn(), renderSlot, loadImage: loader,
+    useDisclosure, callId: 'c1', toolName: 'read_image', ...('kind' in block ? { phase: 'result' as const, block: block } : { phase: block.phase, block: block }), openFile: vi.fn(),
+    renderImageSlot: renderSlot, loadImage: loader,
     sessionId: SID, useSessions: bindSnapshotSelector(list()),
     t,
   } as Parameters<typeof ReadImageRow>[0])
@@ -378,7 +381,6 @@ describe('ReadImageRow keyed toolview', () => {
       name: 'tool.call.toolview',
       key: 'read_image',
       locale: 'conversation',
-      children: { 'tool.call.images': { kind: 'single', scope: 'session' } },
     }])
     expect(readImageToolview.inject).toEqual(['slots'])
   })

@@ -1000,11 +1000,11 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
     },
     "offset": {
       "type": "number",
-      "description": "1-based first line to return. Defaults to 1."
+      "description": "1-based first line to return. Defaults to 1. Text files only."
     },
     "limit": {
       "type": "number",
-      "description": "Maximum number of lines to return. Defaults to 2000."
+      "description": "Maximum number of lines to return. Defaults to 2000. Text files only."
     }
   },
   "required": [

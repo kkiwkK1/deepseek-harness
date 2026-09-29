@@ -41,6 +41,9 @@ const BASE_PATCH = join(REPO_ROOT, 'packages/bundle/base/cordis.patch.yml')
 const WEB_BUNDLE = join(REPO_ROOT, 'packages/bundle/web-app')
 const WEB_PATCHES = bundlePatchPaths(WEB_BUNDLE, (JSON.parse(readFileSync(join(WEB_BUNDLE, 'package.json'), 'utf8')) as { dsh: { bundle: { patch: string[] } } }).dsh.bundle)
 const webPatches = (label: string): PatchOptions[] => WEB_PATCHES.flatMap(file => loadOverlayPatches(label, file))
+const PI_BUNDLE = join(REPO_ROOT, 'packages/bundle/pi')
+const PI_PATCHES = bundlePatchPaths(PI_BUNDLE, (JSON.parse(readFileSync(join(PI_BUNDLE, 'package.json'), 'utf8')) as { dsh: { bundle: { patch: string[] } } }).dsh.bundle)
+const piPatches = (label: string): PatchOptions[] => PI_PATCHES.flatMap(file => loadOverlayPatches(label, file))
 const CODEX_PACKAGE_DIR = join(REPO_ROOT, 'packages/subagent/subagent-codex')
 const CLAUDE_CODE_PACKAGE_DIR = join(REPO_ROOT, 'packages/subagent/subagent-claude-code')
 /** The installation anchor whose dependency surface the runtime resolution mirrors. */
@@ -122,7 +125,7 @@ async function bootWeb(
   const home = profileHome
   const profileDir = join(home, 'profiles', 'spec')
   await mkdir(profileDir, { recursive: true })
-  if (profileBundles === undefined) initProfile(profileDir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+  if (profileBundles === undefined) initProfile(profileDir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-pi'])
   // Product Bundles are installed into the Profile, not the dsh app. Model
   // pnpm's package link for only the selected products; their own production
   // dependencies resolve from the linked workspace packages, while shared
@@ -143,6 +146,7 @@ async function bootWeb(
   let bundlePatches: PatchOptions[] = [
     ...loadOverlayPatches('dsh-test', BASE_PATCH),
     ...webPatches('dsh-test'),
+    ...piPatches('dsh-test'),
   ]
   if (profileBundles !== undefined) {
     await writeFile(join(profileDir, 'package.json'), JSON.stringify({
@@ -168,7 +172,7 @@ async function bootWeb(
   return await boot('dsh-test', rootConfig, [...bundlePatches, ...overrides], async (bootCtx) => {
     bootCtx.provide('profileContext', { name: 'spec', dir: profileDir, patchPath: profile.patchPath,
       installAnchor: INSTALL_ANCHOR, home, cwd: home,
-      startedBundles: profileBundles ?? ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+      startedBundles: profileBundles ?? ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-pi'],
       overlays: [], telemetryDisabledEnv: '1' })
     await bootCtx.plugin(PluginPackages, { resolution })
     bootCtx.provide('connection', {
@@ -245,7 +249,7 @@ describe('the shipped Web composition', () => {
   it('supplies both shipped presets, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'pi', 'ptc', 'standard'])
     expect(listed.every(preset => !('path' in preset))).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
@@ -327,6 +331,46 @@ describe('the shipped Web composition', () => {
       expect(handle.agent.ctx.get('fs')?.sandboxMode).toBe(ctx.get('fs')?.sandboxMode)
       expect(ctx.agentPresets.serviceFor(handle.agent, 'compaction')).toBeUndefined()
       expect(handle.agent.ctx.get('compaction')).toBeUndefined()
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  it('composes the four-tool pi agent with images folded into read', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-pi'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'pi').then(() => undefined),
+    })
+    try {
+      const shell = process.platform === 'win32' ? 'pwsh' : 'bash'
+      // The whole operation space: read/write/edit plus the platform shell —
+      // no search, jobs, skills, goals, planning, delegation, web, or plugin
+      // tools, and no separate read_image.
+      expect(toolNames(ctx, handle.agent)).toEqual(['edit', 'read', 'write', shell].sort())
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      expect(assembly.tools.map(tool => tool.name).sort()).toEqual(['edit', 'read', 'write', shell].sort())
+      // Integrated image routing: read advertises images and carries no
+      // read_image beside it.
+      const readDescription = assembly.tools.find(tool => tool.name === 'read')?.description ?? ''
+      expect(readDescription).toContain('PNG/JPEG/WebP/GIF')
+      // Foreground-only shell: run_in_background is advertised only while
+      // background execution is available.
+      const shellParameters = assembly.tools.find(tool => tool.name === shell)?.parameters.properties
+      const shellParameterNames = shellParameters !== undefined && shellParameters !== null
+        ? Object.keys(shellParameters)
+        : []
+      expect(shellParameterNames).not.toContain('run_in_background')
+      const sections = assembly.sections.map(section => section.name)
+      expect(sections).toContain('deployment:persona-prefix')
+      expect(sections).toContain('tool:read')
+      expect(sections).toContain(shell === 'bash' ? 'tool:bash' : 'tool:pwsh')
+      expect(sections).not.toContain('tool:read_image')
+      // Compaction is session infrastructure behind the preset's isolate
+      // realm: mounted for the agent, invisible to the host plane, and no
+      // fs/job/skill/goal/delegation service moves into the preset's realm.
+      expect(ctx.agentPresets.serviceFor(handle.agent, 'compaction')).toBeDefined()
+      expect(ctx.agentPresets.serviceFor(handle.agent, 'fs')).toBeUndefined()
+      expect(ctx.commands.find(handle.agent, 'goal')).toBeUndefined()
     } finally {
       await handle.dispose()
     }

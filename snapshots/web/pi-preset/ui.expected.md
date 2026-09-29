@@ -1,0 +1,43 @@
+- banner:
+  - navigation "Session hierarchy": Use the read tool to
+  - text: Pi mode
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+- text: Use the read tool to read note.md, then use the read tool again to read dot.png. Then reply exactly PI_PRESET_REQUEST_OK and stop. {{clock}}
+- button "Copy"
+- status: Worked
+- button "Took {{duration}}" [expanded]
+- button "Read files" [expanded]
+- button "Read note.md" [expanded]:
+  - text: Read
+  - button "note.md"
+- text: md note.md
+- button "Wrap lines"
+- button "Copy"
+- text: pi line one pi line two
+- button "Inspect"
+- button "Read dot.png" [expanded]:
+  - text: Read
+  - button "dot.png"
+- text: dot.png
+- button "dot.png, click to view original":
+  - img "dot.png"
+- text: <path>{{cwd}}\dot.png</path> <type>image</type> <content> image/png image, 1x1 px, 69 bytes </content>
+- button "Inspect"
+- paragraph: PI_PRESET_REQUEST_OK
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Select model, current DeepSeek-V4-Flash-Vision-Exp, reasoning effort high": DeepSeek-V4-Flash-Vision-Exp high
+- button "Send message" [disabled]
+- button "1 turns 3 steps · {{throughput}} tok/s": 1 turns 3 steps{{throughput}} tok/s
+- button "42 tok · Cache hit 0%": 42 tokCache hit 0%
+- button "0% of context used": 0%

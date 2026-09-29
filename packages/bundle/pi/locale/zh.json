@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pi 模式",
+    "description": "加入 Pi Agent 预设：以 read、write、edit 和一个平台 shell 作为全部操作空间。"
+  }
+}

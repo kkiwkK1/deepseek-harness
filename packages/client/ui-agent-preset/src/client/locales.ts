@@ -21,6 +21,8 @@ export type AgentPresetSettingsKey =
   | 'presetMinimalDescription'
   | 'presetCordisName'
   | 'presetCordisDescription'
+  | 'presetPiName'
+  | 'presetPiDescription'
   | 'inUse'
   | 'noDescription'
   | 'brokenBadge'
@@ -55,6 +57,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
+  presetPiName: 'Pi mode',
+  presetPiDescription:
+    'A lean four-tool workspace: read, write, edit, and one terminal command at a time. Search, listing, builds, and tests all run through the shell.',
 
   inUse: 'New task default',
 
@@ -92,6 +97,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalDescription: 'Agent 仅使用终端工具完成任务，适合测试和对比其基础表现。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
+  presetPiName: 'Pi 模式',
+  presetPiDescription: '精简的四工具工作台：read、write、edit，加一条终端命令。搜索、列目录、构建和测试都通过终端完成。',
 
   inUse: '新任务默认',
 

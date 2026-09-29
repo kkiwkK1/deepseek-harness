@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 最小组合
 
-一个后端、策略插件，然后是工具；附件存储为可选，用于启用 `read_image`。
+一个后端、策略插件，然后是工具；附件存储为可选，用于启用 `read_image`（`imageReadMode: integrated` 时始终必需）。
 
 ```yaml
 - name: '@deepseek-ai/dsh-fs-local'
@@ -60,6 +60,7 @@ kind: "package-reference"
 | `readMaxLineLength` | `2000` | 每行截断前保留的字符数 |
 | `readMaxBytes` | `51200` | 一次 `read` 调用所选行的字节上限；溢出时以「已达上限」footer 结束窗口 |
 | `readStreamMinSize` | `10485760` | 大于等于该大小或大小未知的文件采用流式读取，而不是整体加载到内存 |
+| `imageReadMode` | `separate` | `separate` 保持 `read` 仅处理文本并在旁边注册 `read_image`；`integrated` 让扩展名声明为受支持图片的路径直接走 `read` 本身，不注册 `read_image`，图片读取拒绝 `offset`/`limit`，并且在加载时要求附件服务 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-fs)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -135,10 +136,16 @@ kind: "package-reference"
 
 组装时，每个指导段落通过 `ctx.tools.get(name, scope)` 检查对应工具，仅在该 agent 可见时输出。write 段落仅在 edit 可见时推荐 edit。三个工具都可用时，下方原文保持不变；限制的施加、解除和工具注册变化在下次组装时生效。同一检查适用于直接限制 agent 和 subagent 的 `toolFilter`，也适用于通过 `run_code` 暴露的 PTC 能力。 write/edit 中的先读后改句子描述观察策略，并非要求调用名为 `read` 的工具。隐藏 `read` 时仍保留这些句子：策略继续保护修改操作，其他产生观察记录的操作（例如 `str_replace_editor` 的 `command: view`）也能建立同一文件观察记录。工具可见性不会禁用该前置条件。
 
-##### Read 指导
+##### Read 指导（separate 模式，默认）
 
 ```markdown
 Use the read tool — not shell commands like cat — to inspect text files. Use offset and limit to continue reading large files.
+```
+
+##### Read 指导（integrated 模式）
+
+```markdown
+Use the read tool — not shell commands like cat — to inspect text files and images. Use offset and limit to continue reading large text files; image reads return the image itself and accept neither argument.
 ```
 
 ##### Write 指导
@@ -165,7 +172,7 @@ Read a file before editing it (the default fs-observation-policy requires it), u
 
 #### 模型看到的内容
 
-模型会看到已生成的 [`read`、`read_image`、`write` 和 `edit` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-fs)，参数使用 snake_case。图片工具只在持久附件存储已挂载时出现；schema 本身与路由无关，严格门禁在执行时拒绝。作用域工具限制可以为某个 agent 移除任一定义。
+模型会看到已生成的 [`read`、`read_image`、`write` 和 `edit` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-fs)，参数使用 snake_case。图片工具只在持久附件存储已挂载时出现；schema 本身与路由无关，严格门禁在执行时拒绝。`imageReadMode: integrated` 时不注册 `read_image`，由 `read` 的 schema 自己声明 PNG/JPEG/WebP/GIF。作用域工具限制可以为某个 agent 移除任一定义。
 
 #### Token 影响
 
@@ -193,7 +200,7 @@ Read a file before editing it (the default fs-observation-policy requires it), u
 
 #### 模型看到的内容
 
-成功的 `read_image` 返回 `<path><displayPath></path>`、`<type>image</type>` 和写明媒体类型、规范化尺寸与字节数的 `<content>` 信封，随后是作为原生图像块的图像本身。结果会随持久引用写入会话日志，然后才进入下一次模型请求。
+成功的 `read_image` —— 或 integrated 模式下 `read` 读取扩展名声明为受支持图片的路径 —— 返回 `<path><displayPath></path>`、`<type>image</type>` 和写明媒体类型、规范化尺寸与字节数的 `<content>` 信封，随后是作为原生图像块的图像本身。结果会随持久引用写入会话日志，然后才进入下一次模型请求。
 
 #### Token 影响
 
@@ -239,7 +246,7 @@ Read a file before editing it (the default fs-observation-policy requires it), u
 这些限制说明工具套件何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是通用文件系统对比或任务积压。
 
 - **未交付面向模型的目录列表工具**：`ctx.fs.listDir` 服务于 skill（技能）发现等提供方代码，同级 `dsh-tool-fs-search` 包则提供基于 ripgrep 的 `glob` 与 `grep`，而不是扩展文件系统 seam。
-- **`read` 只处理 UTF-8 文本文件**：图像使用独立的 `read_image` 工具；PDF、音频和视频仍延期处理。目录目标为 `FS_NOT_REGULAR_FILE`。
+- **`read` 默认只处理 UTF-8 文本文件**：图像使用独立的 `read_image` 工具；`imageReadMode: integrated` 让扩展名声明为图片的路径直接走 `read` 本身（无扩展名的文件仍走文本路径）；PDF、音频和视频仍延期处理。目录目标为 `FS_NOT_REGULAR_FILE`。
 - **媒体类型按扩展名声明**：扩展名选择声明类型，附件存储的魔数校验保持权威；扩展名错误但格式正确的图像会得到改名修复提示，而不是被嗅探接受。只有没有扩展名的路径按文件签名识别格式。
 - **对象路径重新走源准入**：对规范化附件对象调用 `read_image` 会把其字节作为新来源重新准入，因此把 `maxImageBytes`/`maxMessageImageBytes` 配置得低于规范化图片字节预算的部署可能拒绝 `ctx.attachments.readImage` 仍可读取的对象路径；默认配置下规范化预算（4 MiB）远低于源上限（20 MiB）。
 - **内嵌图像预览依赖 UI 组合**：工具结果卡片经由浏览器的 `tool.call.images` 槽位渲染图像，由附件呈现插件填充；未组合该插件的 UI 改为显示结果的信封文本。

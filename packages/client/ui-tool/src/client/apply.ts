@@ -41,6 +41,9 @@ export function apply(ctx: ClientContext): void {
         kind: 'keyed', scope: 'session',
         inject: { hooks: { toolCallArgumentsPartial: bindToolCallArgumentsPartial } },
       },
+      // One claim for every image-bearing row: the tree hands the dispatcher
+      // down as `renderImageSlot` owner currency (see contract/slots.ts).
+      'tool.call.images': { kind: 'single', scope: 'session' },
     },
     inject: toolInject,
   }, ToolCallTree))

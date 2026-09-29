@@ -202,18 +202,23 @@ function fullyRendered(content: readonly unknown[]): boolean {
  * @param sessionCwd - the session workspace root; a workspace-rooted absolute
  *   path label displays relative to it. Absent leaves the path as authored.
  * @param home - host account home; a leftover POSIX home path displays as `~`.
+ * @param toolName - the tool this derivation is invoked for: `read_image`, or
+ *   `read` when the deployment folds image reads into `read` itself
+ *   (`imageReadMode: integrated`). The content-shape gates below decide the
+ *   outcome; the name only anchors the call head and the label fallback.
  * @returns the image-card props, or null for the generic path.
  */
 export function imageCardModel(
   block: ToolCallBlock,
   sessionCwd?: string,
   home?: string,
+  toolName: string = 'read_image',
 ): ImageCardModel | null {
   // Result-side only: a running call is not a ToolResultNode and carries no
   // content, so it has no card here.
   if (!('kind' in block) || block.isError) return null
   const call = parsedToolCall(block)
-  if (call?.name !== 'read_image') return null
+  if (call?.name !== toolName) return null
   const { file_path: filePath } = call.args
   if (typeof filePath !== 'string' || filePath.trim() === '') return null
   // The label path: root calls persist it in presentationMeta; a nested call

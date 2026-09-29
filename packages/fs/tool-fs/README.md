@@ -29,7 +29,7 @@ Mount the tools after a `ctx.fs` backend and, for read-before-write/edit behavio
 
 ### Minimal composition
 
-A backend, the policy plugin, then the tools; the attachment store is optional and enables `read_image`.
+A backend, the policy plugin, then the tools; the attachment store is optional and enables `read_image` (always required for `imageReadMode: integrated`).
 
 ```yaml
 - name: '@deepseek-ai/dsh-fs-local'
@@ -60,6 +60,7 @@ All keys are optional; the defaults are the shipped read caps.
 | `readMaxLineLength` | `2000` | Characters kept per line before truncation |
 | `readMaxBytes` | `51200` | Byte cap on one `read` call's selected lines; overflow ends the window with a capped footer |
 | `readStreamMinSize` | `10485760` | Files at or above this size (or of unknown size) stream instead of loading whole into memory |
+| `imageReadMode` | `separate` | `separate` keeps `read` text-only and registers `read_image` beside it; `integrated` routes a path whose extension declares a supported image through `read` itself, registers no `read_image`, refuses `offset`/`limit` on image reads, and requires the attachment service at load |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-fs) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -135,10 +136,16 @@ Read these pages when the package-level contract is not enough. They move from t
 
 At assembly time, each guidance section checks `ctx.tools.get(name, scope)` and renders only while its tool is visible to that agent. The write paragraph recommends edit only while edit is visible. The text below is unchanged when all three tools are available; restrictions, their removal, and tool registration changes take effect on the next assembly. The same check works for direct agent restrictions and subagent `toolFilter`, including PTC capabilities behind `run_code`. The read-before-mutation sentences in write/edit describe the observation policy, not a requirement to invoke the tool named `read`. They remain when `read` is hidden: the policy still guards mutations, and another observing operation, such as `str_replace_editor` with `command: view`, can establish the same file observation. Tool visibility does not disable that precondition.
 
-##### Read guidance
+##### Read guidance (separate mode, the default)
 
 ```markdown
 Use the read tool — not shell commands like cat — to inspect text files. Use offset and limit to continue reading large files.
+```
+
+##### Read guidance (integrated mode)
+
+```markdown
+Use the read tool — not shell commands like cat — to inspect text files and images. Use offset and limit to continue reading large text files; image reads return the image itself and accept neither argument.
 ```
 
 ##### Write guidance
@@ -165,7 +172,7 @@ Prefix-stable while the visible tool set, plugin scope, and guidance text are un
 
 #### What the model sees
 
-The model sees the generated [`read`, `read_image`, `write`, and `edit` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-fs), with snake_case arguments. The image tool appears only while a durable attachment store is mounted; its schema is route-independent, and the strict gate refuses at execution. Scoped tool restrictions can remove any definition for one agent.
+The model sees the generated [`read`, `read_image`, `write`, and `edit` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-fs), with snake_case arguments. The image tool appears only while a durable attachment store is mounted; its schema is route-independent, and the strict gate refuses at execution. With `imageReadMode: integrated`, no `read_image` registers and the `read` schema itself advertises PNG/JPEG/WebP/GIF. Scoped tool restrictions can remove any definition for one agent.
 
 #### Token effect
 
@@ -193,7 +200,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-A successful `read_image` returns `<path><displayPath></path>`, `<type>image</type>`, and a `<content>` envelope naming the media type, normalized dimensions, and byte size, followed by the image itself as a native image block. The result is logged with its durable reference before the next model request.
+A successful `read_image` — or an integrated-mode `read` on a path whose extension declares a supported image — returns `<path><displayPath></path>`, `<type>image</type>`, and a `<content>` envelope naming the media type, normalized dimensions, and byte size, followed by the image itself as a native image block. The result is logged with its durable reference before the next model request.
 
 #### Token effect
 
@@ -239,7 +246,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 These limits define when the tool suite is a poor fit or needs special operational care. They are current package constraints, not a general filesystem comparison or a task backlog.
 
 - **No model-facing directory listing ships** — `ctx.fs.listDir` serves provider code such as skill discovery, while the sibling `dsh-tool-fs-search` package supplies ripgrep-backed `glob` and `grep` rather than extending the filesystem seam.
-- **`read` handles UTF-8 text files only** — images use the separate `read_image` tool; PDF, audio, and video remain deferred. A directory target is `FS_NOT_REGULAR_FILE`.
+- **`read` handles UTF-8 text files only in the default mode** — images use the separate `read_image` tool; `imageReadMode: integrated` routes extension-declared images through `read` itself (extension-less files stay on the text path); PDF, audio, and video remain deferred. A directory target is `FS_NOT_REGULAR_FILE`.
 - **Extension-declared media type** — an extension selects the declared type and the attachment store's magic-byte validation stays authoritative; a correctly formatted image under a wrong extension is refused with the rename remedy rather than sniffed. Only a path with no extension is identified from its file signature.
 - **Object paths re-enter source admission** — `read_image` on a normalized attachment object re-admits its bytes as a new source, so a deployment whose `maxImageBytes`/`maxMessageImageBytes` sit below the normalized-image byte budget can refuse an object path that `ctx.attachments.readImage` still serves; shipped defaults keep the normalized budget (4 MiB) far under the source caps (20 MiB).
 - **Inline image preview rides the UI composition** — the tool-result card renders the image through the browser's `tool.call.images` slot, which the attachment presentation plugin fills; a UI without that plugin shows the result's envelope text instead.

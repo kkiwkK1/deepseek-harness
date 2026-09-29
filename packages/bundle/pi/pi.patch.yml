@@ -1,0 +1,73 @@
+# The pi bundle layer: one `@deepseek-ai/dsh-agent-preset` declaration over the
+# base + web-app layers. The pi preset narrows the model's operation space to
+# four tools — read, write, edit, and the platform shell (bash off Windows,
+# pwsh on it) — so search, listing, builds, and tests all run through the
+# shell, images read through `read` itself (`imageReadMode: integrated`), and
+# questions reach the user as ordinary replies. Everything the preset does not
+# mount (jobs, skills, goals, planning, delegation, workflow, web, plugin
+# management) never registers, exactly like the shipped `minimal` preset.
+- insert:
+    - id: preset-pi
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: pi
+        order: 5
+        plugins:
+          # Same persona identity as `standard`; the four tools' own
+          # descriptions carry the operating detail, so nothing else loads.
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              suffix: >-
+                Your working directory is {{cwd}}. Ask the user questions as a normal reply when you need a decision or missing information.
+              prefix: >-
+                You are a coding agent powered by the {{model}} model.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          # One platform shell, foreground-only: both handoff flags off, so a
+          # timed-out or cancelled command is killed with its wait instead of
+          # leaving a job id the four tools cannot manage.
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+            config:
+              enableRunInBackground: false
+              promoteOnTimeout: false
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+            config:
+              enableRunInBackground: false
+              promoteOnTimeout: false
+          # Files through one read: image paths return the image itself and no
+          # read_image registers beside the suite.
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              imageReadMode: integrated
+          # Native tool calling, stated explicitly rather than inherited.
+          - id: tool-presentation
+            name: '@deepseek-ai/dsh-agent-tool-presentation'
+            config:
+              mode: native
+          # Session infrastructure, no model-visible tools: context compaction
+          # for long tasks, the user's /compact command, and old-result pruning.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

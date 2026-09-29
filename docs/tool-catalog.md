@@ -994,11 +994,11 @@ Read a UTF-8 text file and return line-numbered content.
     },
     "offset": {
       "type": "number",
-      "description": "1-based first line to return. Defaults to 1."
+      "description": "1-based first line to return. Defaults to 1. Text files only."
     },
     "limit": {
       "type": "number",
-      "description": "Maximum number of lines to return. Defaults to 2000."
+      "description": "Maximum number of lines to return. Defaults to 2000. Text files only."
     }
   },
   "required": [

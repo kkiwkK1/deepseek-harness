@@ -386,6 +386,29 @@ describe('loadProfile', () => {
     ])
   })
 
+  it('normalizes the exact pre-pi web bundle tuple to the shipped template', () => {
+    const anchor = stageInstallation({
+      '@deepseek-ai/dsh-base': { patch: '[]\n' },
+      '@deepseek-ai/dsh-web-app': { patch: '[]\n' },
+      '@deepseek-ai/dsh-pi': { patch: '[]\n' },
+    })
+    const home = tmp()
+    // A Web profile initialized before `dsh-pi` joined the template upgrades
+    // in place; an edited bundle list stays untouched.
+    const stock = resolveProfileDir('web', home)
+    initProfile(stock, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    loadProfile('t', 'web', anchor, home)
+    expect(readProfileManifest('t', stock).dsh?.profile?.bundles).toEqual([...PROFILE_TEMPLATES.web?.bundles ?? []])
+
+    const editedHome = tmp()
+    const edited = resolveProfileDir('web', editedHome)
+    initProfile(edited, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'custom-bundle'])
+    loadProfile('t', 'web', anchor, editedHome)
+    expect(readProfileManifest('t', edited).dsh?.profile?.bundles).toEqual([
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'custom-bundle',
+    ])
+  })
+
   it.each(['missing package', 'invalid manifest', 'not a bundle', 'missing patch', 'invalid patch'])(
     'skips a bundle with %s, retains selections, and retries it on reread', async (failure) => {
       const anchor = stageInstallation({

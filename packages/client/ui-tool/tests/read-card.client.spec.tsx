@@ -10,6 +10,10 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import type { StartedToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { MessageImageLoader } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ToolImagesOwnerProps } from '../src/client/contract/slots.ts'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { CHAT_READ_MAX_LINES, readCallLine, readCardModel } from '../src/client/tool/models/read-card-model.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
@@ -53,6 +57,44 @@ const readMeta = (over?: Partial<ReadMetaFixture>): ReadMetaFixture => ({
 })
 
 const readContent = (body = 'export const a = 1'): string => `<path>src/a.ts</path>\n<type>file</type>\n<content>\n${body}\n</content>`
+
+/** A gallery stub standing in for the attachment presentation plugin. */
+const stubRenderSlot = (): PropsRenderSlots<'tool.call.images'>['renderSlot'] =>
+  ((_key: 'tool.call.images', owner: ToolImagesOwnerProps) => (
+    <div data-images>
+      {owner.images.map(image => (
+        'attachment' in image
+          ? <span key={image.attachment.attachmentId} data-image-id={image.attachment.attachmentId} />
+          : null
+      ))}
+    </div>
+  )) as PropsRenderSlots<'tool.call.images'>['renderSlot']
+
+/** Owner currency the Tool call tree supplies: the gallery dispatcher plus the loader. */
+const imageOwner = (renderSlot?: PropsRenderSlots<'tool.call.images'>['renderSlot']) => ({ renderImageSlot: renderSlot, loadImage })
+
+/** Session-authorized loader stand-in; the stub gallery never resolves it. */
+const loadImage: MessageImageLoader = vi.fn(() => Promise.reject(new Error('not used')))
+
+/** The envelope an integrated image read returns beside its image block. */
+const IMAGE_ENVELOPE = '<path>shots/card.png</path>\n<type>image</type>\n<content>\nimage/png image, 1x1 px, 69 bytes\n</content>'
+
+/** A settled integrated image read: `read` with [text envelope, image block]. */
+const imageSettled = (over?: Partial<ToolResultNode>): ToolResultNode => settled({
+  call: { name: 'read', argsRaw: '{"file_path":"shots/card.png"}' },
+  content: [
+    { type: 'text', text: IMAGE_ENVELOPE },
+    {
+      type: 'image',
+      attachment: {
+        attachmentId: AttachmentId('sha256:b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640'),
+        mediaType: 'image/png', bytes: 69, width: 1, height: 1, name: 'card.png',
+      },
+    },
+  ],
+  meta: { path: 'shots/card.png' },
+  ...over,
+})
 
 const running = (over?: Partial<StartedToolCall>): StartedToolCall => ({
   phase: 'start' as const, callId: 'c1', name: 'read', argsRaw: ARGS,
@@ -210,8 +252,12 @@ describe('ReadRow keyed toolview', () => {
     projectionsBySession: {},
   })
 
-  const rowProps = (block: StartedToolCall | ToolResultNode): Parameters<typeof ReadRow>[0] => ({
+  const rowProps = (
+    block: StartedToolCall | ToolResultNode,
+    renderSlot?: PropsRenderSlots<'tool.call.images'>['renderSlot'],
+  ): Parameters<typeof ReadRow>[0] => ({
     useDisclosure, callId: 'c1', toolName: 'read', ...('kind' in block ? { phase: 'result' as const, block: block } : { phase: block.phase, block: block }), openFile: vi.fn(),
+    ...imageOwner(renderSlot),
     sessionId: SID, useSessions: bindSnapshotSelector(list()),
     t,
   } as Parameters<typeof ReadRow>[0])
@@ -274,6 +320,31 @@ describe('ReadRow keyed toolview', () => {
     expect(view.container.querySelector('[data-state="stopped"] svg')).not.toBeNull()
   })
 
+  it('an integrated image read expands to the image gallery instead of the line card', () => {
+    const view = render(<ReadRow {...rowProps(imageSettled(), stubRenderSlot())} />)
+    // Collapsed: the path summary alone, no card of either kind.
+    expect(view.getAllByText('shots/card.png').length).toBe(1)
+    expect(view.container.querySelector('[data-read]')).toBeNull()
+    expect(view.container.querySelector('[data-images]')).toBeNull()
+    toggleRow(view)
+    // Expanded: the gallery card carries the durable reference; the line card
+    // never mounts beside it.
+    expect(view.container.querySelector('[data-image-id]')?.getAttribute('data-image-id'))
+      .toBe('sha256:b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640')
+    expect(view.container.querySelector('[data-read]')).toBeNull()
+    // The envelope text stays readable under the gallery, raw attachment object
+    // never printed.
+    expect(view.getByText(/image\/png image, 1x1 px/)).toBeTruthy()
+    expect(view.queryByText(/attachmentId/)).toBeNull()
+  })
+
+  it('an integrated image read without the image slot still shows the envelope text', () => {
+    const view = render(<ReadRow {...rowProps(imageSettled(), undefined)} />)
+    toggleRow(view)
+    expect(view.container.querySelector('[data-images]')).toBeNull()
+    expect(view.getByText(/image\/png image, 1x1 px/)).toBeTruthy()
+  })
+
   it('registers under the read key of the keyed toolview slot', () => {
     const registered: { name: unknown; key?: unknown }[] = []
     const ctx = { slots: {
@@ -281,7 +352,9 @@ describe('ReadRow keyed toolview', () => {
       register: (options: { name: unknown; key?: unknown }) => { registered.push(options); return () => undefined },
     } } as unknown as Context
     readToolview.apply(ctx)
-    // The row composes ToolRow, so it declares its locale namespace at the seat.
+    // The row composes ToolRow, so it declares its locale namespace at the seat;
+    // the image gallery is claimed once by the Tool call tree, so the row
+    // registration declares no child slots.
     expect(registered).toEqual([{ name: 'tool.call.toolview', key: 'read', locale: 'conversation' }])
     expect(readToolview.inject).toEqual(['slots'])
   })

@@ -1,0 +1,6 @@
+version: 1
+scenario: pi-preset
+profile: web
+recording: authored
+header:
+  class: web-pi

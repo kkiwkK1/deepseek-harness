@@ -462,7 +462,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   requireDist()
   const {
     auditStartupEntries, composeEntries, createRuntimeResolution, initProfile,
-    mountRootInclude, readProfileManifest, readProfilePatches, loadProfileDirectory, loadOverlayPatches, PluginPackages,
+    mountRootInclude, PROFILE_TEMPLATES, readProfileManifest, readProfilePatches, loadProfileDirectory, loadOverlayPatches, PluginPackages,
     bundlePatchPaths,
   } = appBoot()
   const mode = webSnapshotMode()
@@ -752,7 +752,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       // A real profile: the shipped web bundles plus each fixture package,
       // installed the way `dsh plugin add` leaves them.
       const dependencies: Record<string, string> = {}
-      const bundles = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', ...options.profile?.bundles ?? []]
+      const bundles = [...PROFILE_TEMPLATES.web?.bundles ?? ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'], ...options.profile?.bundles ?? []]
       for (const entry of options.profile?.packages ?? []) {
         const manifest = JSON.parse(await readFile(join(entry.dir, 'package.json'), 'utf8')) as { name: string }
         dependencies[manifest.name] = `file:${entry.dir}`

@@ -1,5 +1,5 @@
 /** Root/subcall Tool composition with one keyed atomic dispatch path. */
-import { memo, useMemo, type ReactNode } from 'react'
+import { memo, useCallback, useMemo, type ReactNode } from 'react'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ToolCallHookContext, ToolCallOwnerProps, ToolCallPhaseProps, ToolTreeProps } from '../contract/slots.ts'
 import { toolRowModel } from './models/tool-call-model.ts'
@@ -31,6 +31,12 @@ const ToolCall = memo(function ToolCall({
   const hookContext = useMemo<ToolCallHookContext>(() => ({
     callId, assistant: preparing ? assistant : undefined,
   }), [assistant, callId, preparing])
+  // The tree holds the one image-gallery claim, so every dispatched row
+  // receives the dispatcher as owner currency.
+  const renderImageSlot = useCallback<NonNullable<ToolCallOwnerProps['renderImageSlot']>>(
+    (key, owner) => renderSlot(key, owner),
+    [renderSlot],
+  )
   const owner: ToolCallOwnerProps = useMemo(() => ({
     callId,
     toolName,
@@ -39,9 +45,10 @@ const ToolCall = memo(function ToolCall({
     cwd,
     home,
     loadImage,
+    renderImageSlot,
     useDisclosure,
     inspect: inspectCall === undefined ? undefined : () => { inspectCall(callId) },
-  }), [callId, toolName, call, openFile, cwd, home, loadImage, inspectCall, useDisclosure])
+  }), [callId, toolName, call, openFile, cwd, home, loadImage, renderImageSlot, inspectCall, useDisclosure])
   const autoReviewDenied = useMemo(
     () => call.phase === 'result' && toolRowModel(toolName, call.block).autoReviewDenial !== null,
     [toolName, call],
